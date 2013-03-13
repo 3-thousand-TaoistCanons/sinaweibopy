@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 __version__ = '1.1.1'
-__author__ = 'Liao Xuefeng (askxuefeng@gmail.com)'
+__author__ = 'Liao Xuefeng (askxuefeng@gmail.com); Tom Li (biergaizi2009@gmail.com)'
 
 '''
 Python client SDK for sina weibo API using OAuth 2.
@@ -13,14 +13,11 @@ try:
 except ImportError:
     import simplejson as json
 
-try:
-    from cStringIO import StringIO
-except ImportError:
-    from StringIO import StringIO
+from io import BytesIO
 
-import gzip, time, hmac, base64, hashlib, urllib, urllib2, logging, mimetypes
+import gzip, time, hmac, base64, hashlib, urllib.request, urllib.parse, urllib.error, urllib.request, urllib.error, urllib.parse, logging, mimetypes
 
-class APIError(StandardError):
+class APIError(Exception):
     '''
     raise APIError if receiving json message indicating failure.
     '''
@@ -28,7 +25,7 @@ class APIError(StandardError):
         self.error_code = error_code
         self.error = error
         self.request = request
-        StandardError.__init__(self, error)
+        Exception.__init__(self, error)
 
     def __str__(self):
         return 'APIError: %s: %s, request: %s' % (self.error_code, self.error, self.request)
@@ -39,14 +36,13 @@ def _parse_json(s):
     def _obj_hook(pairs):
         ' convert json object to python object '
         o = JsonDict()
-        for k, v in pairs.iteritems():
+        for k, v in pairs.items():
             o[str(k)] = v
         return o
     return json.loads(s, object_hook=_obj_hook)
 
 class JsonDict(dict):
     ' general json object that allows attributes to be bound to and also behaves like a dict '
-
     def __getattr__(self, attr):
         try:
             return self[attr]
@@ -56,31 +52,38 @@ class JsonDict(dict):
     def __setattr__(self, attr, value):
         self[attr] = value
 
+    def __getstate__(self):
+        return self.copy()
+
+    def __setstate__(self, state):
+        self.update(state)
+
 def _encode_params(**kw):
     ' do url-encode parameters '
     args = []
-    for k, v in kw.iteritems():
-        qv = v.encode('utf-8') if isinstance(v, unicode) else str(v)
-        args.append('%s=%s' % (k, urllib.quote(qv)))
+    for k, v in kw.items():
+        qv = v.encode('utf-8') if isinstance(v, str) else str(v)
+        args.append('%s=%s' % (k, urllib.parse.quote(qv)))
     return '&'.join(args)
 
 def _encode_multipart(**kw):
     ' build a multipart/form-data body with randomly generated boundary '
     boundary = '----------%s' % hex(int(time.time() * 1000))
     data = []
-    for k, v in kw.iteritems():
+    for k, v in kw.items():
         data.append('--%s' % boundary)
         if hasattr(v, 'read'):
             # file-like object:
             filename = getattr(v, 'name', '')
             content = v.read()
+            content = content.decode('ISO-8859-1')
             data.append('Content-Disposition: form-data; name="%s"; filename="hidden"' % k)
             data.append('Content-Length: %d' % len(content))
             data.append('Content-Type: %s\r\n' % _guess_content_type(filename))
             data.append(content)
         else:
             data.append('Content-Disposition: form-data; name="%s"\r\n' % k)
-            data.append(v.encode('utf-8') if isinstance(v, unicode) else v)
+            data.append(v.encode('utf-8') if isinstance(v, str) else v)
     data.append('--%s--\r\n' % boundary)
     return '\r\n'.join(data), boundary
 
@@ -112,11 +115,11 @@ def _read_body(obj):
     body = obj.read()
     if using_gzip:
         logging.info('gzip content received.')
-        gzipper = gzip.GzipFile(fileobj=StringIO(body))
+        gzipper = gzip.GzipFile(fileobj=BytesIO(body))
         fcontent = gzipper.read()
         gzipper.close()
-        return fcontent
-    return body
+        return fcontent.decode()
+    return body.decode("utf-8")
 
 def _http_call(the_url, method, authorization, **kw):
     '''
@@ -134,21 +137,21 @@ def _http_call(the_url, method, authorization, **kw):
             # fix sina remind api:
             the_url = the_url.replace('https://api.', 'https://rm.api.')
     http_url = '%s?%s' % (the_url, params) if method==_HTTP_GET else the_url
-    http_body = None if method==_HTTP_GET else params
-    req = urllib2.Request(http_url, data=http_body)
+    http_body = None if method==_HTTP_GET else params.encode(encoding='utf-8')
+    req = urllib.request.Request(http_url, data=http_body)
     req.add_header('Accept-Encoding', 'gzip')
     if authorization:
         req.add_header('Authorization', 'OAuth2 %s' % authorization)
     if boundary:
         req.add_header('Content-Type', 'multipart/form-data; boundary=%s' % boundary)
     try:
-        resp = urllib2.urlopen(req)
+        resp = urllib.request.urlopen(req)
         body = _read_body(resp)
         r = _parse_json(body)
         if hasattr(r, 'error_code'):
             raise APIError(r.error_code, r.get('error', ''), r.get('request', ''))
         return r
-    except urllib2.HTTPError, e:
+    except urllib.error.HTTPError as e:
         try:
             r = _parse_json(_read_body(e))
         except:
@@ -205,7 +208,7 @@ class APIClient(object):
         enc_sig, enc_payload = sr.split('.', 1)
         sig = base64.b64decode(_b64_normalize(enc_sig))
         data = _parse_json(base64.b64decode(_b64_normalize(enc_payload)))
-        if data['algorithm'] != u'HMAC-SHA256':
+        if data['algorithm'] != 'HMAC-SHA256':
             return None
         expected_sig = hmac.new(self.client_secret, enc_payload, hashlib.sha256).digest();
         if expected_sig==sig:
