@@ -8,13 +8,8 @@ __author__ = 'Liao Xuefeng (askxuefeng@gmail.com); Tom Li (biergaizi2009@gmail.c
 Python client SDK for sina weibo API using OAuth 2.
 '''
 
-try:
-    import json
-except ImportError:
-    import simplejson as json
-
+import json
 from io import BytesIO
-
 import gzip, time, hmac, base64, hashlib, urllib.request, urllib.parse, urllib.error, urllib.request, urllib.error, urllib.parse, logging, mimetypes
 
 class APIError(Exception):
@@ -62,7 +57,7 @@ def _encode_params(**kw):
     ' do url-encode parameters '
     args = []
     for k, v in kw.items():
-        qv = v.encode('utf-8') if isinstance(v, str) else str(v)
+        qv = v.encode() if isinstance(v, str) else str(v)
         args.append('%s=%s' % (k, urllib.parse.quote(qv)))
     return '&'.join(args)
 
@@ -71,21 +66,22 @@ def _encode_multipart(**kw):
     boundary = '----------%s' % hex(int(time.time() * 1000))
     data = []
     for k, v in kw.items():
-        data.append('--%s' % boundary)
+        data.append(('--%s' % boundary).encode())
         if hasattr(v, 'read'):
             # file-like object:
             filename = getattr(v, 'name', '')
             content = v.read()
-            content = content.decode('ISO-8859-1')
-            data.append('Content-Disposition: form-data; name="%s"; filename="hidden"' % k)
-            data.append('Content-Length: %d' % len(content))
-            data.append('Content-Type: %s\r\n' % _guess_content_type(filename))
+            data.append(('Content-Disposition: form-data; name="%s"; filename="hidden"' % k).encode())
+            data.append(('Content-Length: %d' % len(content)).encode())
+            data.append(('Content-Type: %s\r\n' % _guess_content_type(filename)).encode())
             data.append(content)
         else:
-            data.append('Content-Disposition: form-data; name="%s"\r\n' % k)
-            data.append(v.encode('utf-8') if isinstance(v, str) else v)
-    data.append('--%s--\r\n' % boundary)
-    return '\r\n'.join(data), boundary
+            data.append(('Content-Disposition: form-data; name="%s"\r\n' % k).encode())
+            data.append(v.encode() if isinstance(v, str) else v)
+    data.append(('--%s--\r\n' % boundary).encode())
+    print(data, boundary)
+    print(type(boundary))
+    return b'\r\n'.join(data), boundary
 
 def _guess_content_type(url):
     n = url.rfind('.')
@@ -119,7 +115,7 @@ def _read_body(obj):
         fcontent = gzipper.read()
         gzipper.close()
         return fcontent.decode()
-    return body.decode("utf-8")
+    return body.decode()
 
 def _http_call(the_url, method, authorization, **kw):
     '''
@@ -137,7 +133,7 @@ def _http_call(the_url, method, authorization, **kw):
             # fix sina remind api:
             the_url = the_url.replace('https://api.', 'https://rm.api.')
     http_url = '%s?%s' % (the_url, params) if method==_HTTP_GET else the_url
-    http_body = None if method==_HTTP_GET else params.encode(encoding='utf-8')
+    http_body = None if method==_HTTP_GET else (params.encode() if isinstance(params, str) else params)
     req = urllib.request.Request(http_url, data=http_body)
     req.add_header('Accept-Encoding', 'gzip')
     if authorization:
