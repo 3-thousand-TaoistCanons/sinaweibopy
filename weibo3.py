@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-__version__ = '1.1.1'
+__version__ = '1.1.2'
 __author__ = 'Liao Xuefeng (askxuefeng@gmail.com); Tom Li (biergaizi2009@gmail.com)'
 
 '''
@@ -10,7 +10,7 @@ Python client SDK for sina weibo API using OAuth 2.
 
 import json
 from io import BytesIO
-import gzip, time, hmac, base64, hashlib, urllib.request, urllib.parse, urllib.error, urllib.request, urllib.error, urllib.parse, logging, mimetypes
+import gzip, time, hmac, base64, hashlib, urllib.request, urllib.parse, urllib.error, urllib.request, urllib.error, urllib.parse, logging, mimetypes, collections
 
 class APIError(Exception):
     '''
@@ -54,11 +54,27 @@ class JsonDict(dict):
         self.update(state)
 
 def _encode_params(**kw):
-    ' do url-encode parameters '
+    '''
+    do url-encode parameters
+
+    >>> _encode_params(a=1, b='R&D') in ('a=1&b=R%26D', 'b=R%26D&a=1')
+    True
+    >>> _encode_params(a=u'\u4e2d\u6587', b=['A', 'B', 123]) in ('a=%E4%B8%AD%E6%96%87&b=A&b=B&b=123', 'b=A&b=B&b=123&a=%E4%B8%AD%E6%96%87')
+    True
+    '''
     args = []
     for k, v in kw.items():
-        qv = v.encode() if isinstance(v, str) else str(v)
-        args.append('%s=%s' % (k, urllib.parse.quote(qv)))
+        if isinstance(v, str):
+            qv = v.encode() if isinstance(v, str) else v
+            args.append('%s=%s' % (k, urllib.parse.quote(qv)))
+        elif isinstance(v, collections.Iterable):
+            for i in v:
+                qv = i.encode() if isinstance(i, str) else str(i)
+                args.append('%s=%s' % (k, urllib.parse.quote(qv)))
+        else:
+            qv = str(v)
+            args.append('%s=%s' % (k, urllib.parse.quote(qv)))
+
     return '&'.join(args)
 
 def _encode_multipart(**kw):
@@ -298,3 +314,6 @@ class _Callable(object):
 
     __repr__ = __str__
 
+if __name__=='__main__':
+    import doctest
+    doctest.testmod()
