@@ -108,7 +108,6 @@ def _read_body(obj):
     using_gzip = obj.headers.get('Content-Encoding', '')=='gzip'
     body = obj.read()
     if using_gzip:
-        logging.info('gzip content received.')
         gzipper = gzip.GzipFile(fileobj=BytesIO(body))
         fcontent = gzipper.read()
         gzipper.close()
