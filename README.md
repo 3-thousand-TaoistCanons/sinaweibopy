@@ -1,4 +1,4 @@
-# Sinaweibopy 
+# Sinaweibopy3
 
 A stand-alone Python script which provides
 * OAuth2.0 authentication
