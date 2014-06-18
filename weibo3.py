@@ -12,6 +12,9 @@ import json
 from io import BytesIO
 import gzip, time, hmac, base64, hashlib, urllib.request, urllib.parse, urllib.error, urllib.request, urllib.error, urllib.parse, logging, mimetypes, collections
 
+_authorize_code = ""
+_app_key = ""
+
 class APIError(Exception):
     '''
     raise APIError if receiving json message indicating failure.
@@ -136,6 +139,8 @@ def _http_call(the_url, method, authorization, **kw):
     '''
     params = None
     boundary = None
+    if not kw.get("source"):
+        kw["access_token"] = authorization
     if method==_HTTP_UPLOAD:
         # fix sina upload url:
         the_url = the_url.replace('https://api.', 'https://upload.api.')
@@ -149,8 +154,8 @@ def _http_call(the_url, method, authorization, **kw):
     http_body = None if method==_HTTP_GET else (params.encode() if isinstance(params, str) else params)
     req = urllib.request.Request(http_url, data=http_body)
     req.add_header('Accept-Encoding', 'gzip')
-    if authorization:
-        req.add_header('Authorization', 'OAuth2 %s' % authorization)
+    #if authorization:
+    #    req.add_header('Authorization', 'OAuth2 %s' % authorization)
     if boundary:
         req.add_header('Content-Type', 'multipart/form-data; boundary=%s' % boundary)
     try:
@@ -188,6 +193,8 @@ class APIClient(object):
     '''
     def __init__(self, app_key, app_secret, redirect_uri=None, response_type='code', domain='api.weibo.com', version='2'):
         self.client_id = str(app_key)
+        global _app_key
+        _app_key = app_key
         self.client_secret = str(app_secret)
         self.redirect_uri = redirect_uri
         self.response_type = response_type
@@ -250,6 +257,9 @@ class APIClient(object):
         '''
         return access token as a JsonDict: {"access_token":"your-access-token","expires_in":12345678,"uid":1234}, expires_in is represented using standard unix-epoch-time
         '''
+        global _authorize_code
+        _authorize_code = code
+
         redirect = redirect_uri if redirect_uri else self.redirect_uri
         if not redirect:
             raise APIError('21305', 'Parameter absent: redirect_uri', 'OAuth2 request')
@@ -266,6 +276,10 @@ class APIClient(object):
             if rtime < expires:
                 expires = rtime
         return JsonDict(access_token=r.access_token, expires=expires, expires_in=expires, uid=r.get('uid', None))
+
+    def set_authorize_code(self, code):
+        global _authorize_code
+        _authorize_code = code
 
     def is_expires(self):
         return not self.access_token or time.time() > self.expires
@@ -288,6 +302,9 @@ class _Executable(object):
         method = _METHOD_MAP[self._method]
         if method==_HTTP_POST and 'pic' in kw:
             method = _HTTP_UPLOAD
+        if self._path == "statuses/user_timeline":
+            kw["source"] = _app_key
+            kw["access_token"] = _authorize_code
         return _http_call('%s%s.json' % (self._client.api_url, self._path), method, self._client.access_token, **kw)
 
     def __str__(self):
