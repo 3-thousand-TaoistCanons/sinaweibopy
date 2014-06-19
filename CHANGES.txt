@@ -29,3 +29,7 @@ Version 1.1.1 released 2013-03-01
 Version 1.1.2 released 2013-03-26
 
 * Fix urlencode of list params.
+
+Version 1.1.3 released 2014-06-19
+
+* Add a hack to break the limitation of "user_timeline".
